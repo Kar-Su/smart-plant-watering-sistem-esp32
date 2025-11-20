@@ -1,15 +1,41 @@
 const LIGHT_THRESHOLD = 1500;
+const DISCONNECT_TIMEOUT_MS = 60_000;
 
 let autoEnabled = true;
 let autoPending = false;
 
+let lastSeenMs = null;
+
+function setDisconnectedUI() {
+  const statusText = document.getElementById("status-text");
+  const statusDot = document.getElementById("status-dot");
+  const waterBadge = document.getElementById("water-badge");
+
+  statusText.textContent = "ESP32 disconnected";
+  statusDot.className = "status-dot err";
+  waterBadge.textContent = "Pompa: unknown";
+  waterBadge.className = "badge badge-idle";
+
+  document.getElementById("btn-water").disabled = true;
+}
+
+function setConnectedUIEnableButtons() {
+  document.getElementById("btn-water").disabled = false;
+}
+
+function checkConnectionStale() {
+  if (lastSeenMs === null) return;
+
+  const age = Date.now() - lastSeenMs;
+  if (age > DISCONNECT_TIMEOUT_MS) {
+    setDisconnectedUI();
+  }
+}
+
 async function fetchLatest() {
   try {
     const res = await fetch("/api/latest", { cache: "no-store" });
-
-    if (!res.ok) {
-      throw new Error("HTTP " + res.status);
-    }
+    if (!res.ok) throw new Error("HTTP " + res.status);
 
     const data = await res.json();
 
@@ -24,7 +50,7 @@ async function fetchLatest() {
     const autoLabel = document.getElementById("auto-label");
 
     if (data === null) {
-      statusText.textContent = "Belum ada data dari ESP32.";
+      statusText.textContent = "Belum ada data dari ESP32";
       statusDot.className = "status-dot wait";
       soilEl.textContent = "-";
       lightEl.textContent = "-";
@@ -35,23 +61,30 @@ async function fetchLatest() {
       return;
     }
 
+    const updated = new Date(data.updated_at);
+    lastSeenMs = updated.getTime();
+
+    if (Date.now() - lastSeenMs > DISCONNECT_TIMEOUT_MS) {
+      setDisconnectedUI();
+      return;
+    } else {
+      setConnectedUIEnableButtons();
+    }
+
     soilEl.textContent = data.soil;
     lightEl.textContent = data.light;
 
-    if (data.light < LIGHT_THRESHOLD) {
-      warningBar.classList.remove("hidden");
-    } else {
-      warningBar.classList.add("hidden");
-    }
+    if (data.light < LIGHT_THRESHOLD) warningBar.classList.remove("hidden");
+    else warningBar.classList.add("hidden");
 
     if (data.is_watering === true) {
-      statusText.textContent = "ESP32 sedang / baru saja menyiram tanaman.";
+      statusText.textContent = "ESP32 sedang menyiram";
       statusDot.className = "status-dot ok";
       waterBadge.textContent = "Pompa ON";
       waterBadge.className = "badge badge-watering";
     } else {
-      statusText.textContent = "ESP32 tidak menyiram. Monitoring normal.";
-      statusDot.className = "status-dot wait";
+      statusText.textContent = "ESP32 sedang monitoring";
+      statusDot.className = "status-dot ok";
       waterBadge.textContent = "Pompa OFF";
       waterBadge.className = "badge badge-idle";
     }
@@ -59,25 +92,17 @@ async function fetchLatest() {
     if (typeof data.auto_enabled === "boolean") {
       if (!autoPending) {
         autoEnabled = data.auto_enabled;
-      } else {
-        if (data.auto_enabled === autoEnabled) {
-          autoPending = false;
-        }
+      } else if (data.auto_enabled === autoEnabled) {
+        autoPending = false;
       }
     }
 
     autoToggle.checked = autoEnabled;
     autoLabel.textContent = autoEnabled ? "Mode auto: ON" : "Mode auto: OFF";
 
-    const updated = new Date(data.updated_at);
     lastUpdate.textContent = "Last update: " + updated.toLocaleTimeString();
   } catch (err) {
-    const statusText = document.getElementById("status-text");
-    const statusDot = document.getElementById("status-dot");
-
-    statusText.textContent = "Gagal fetch data dari server.";
-    statusDot.className = "status-dot err";
-    console.error("Error fetch /api/latest:", err);
+    console.error("fetchLatest error:", err);
   }
 }
 
@@ -89,14 +114,11 @@ const autoLabel = document.getElementById("auto-label");
 btnWater.addEventListener("click", async () => {
   btnWater.disabled = true;
   waterStatus.textContent = "Mengirim perintah siram...";
-
   try {
     const res = await fetch("/api/water", { method: "POST" });
     if (!res.ok) throw new Error("HTTP " + res.status);
-
-    waterStatus.textContent = "Perintah siram dikirim ke ESP32.";
+    waterStatus.textContent = "Perintah siram dikirim.";
   } catch (err) {
-    console.error(err);
     waterStatus.textContent = "Gagal mengirim perintah.";
   } finally {
     setTimeout(() => {
@@ -109,7 +131,6 @@ btnWater.addEventListener("click", async () => {
 autoToggle.addEventListener("change", async () => {
   autoEnabled = autoToggle.checked;
   autoPending = true;
-
   autoLabel.textContent = autoEnabled ? "Mode auto: ON" : "Mode auto: OFF";
 
   try {
@@ -119,7 +140,6 @@ autoToggle.addEventListener("change", async () => {
       body: JSON.stringify({ enabled: autoEnabled }),
     });
   } catch (err) {
-    console.error("Gagal kirim auto mode:", err);
     autoPending = false;
     autoEnabled = !autoEnabled;
     autoToggle.checked = autoEnabled;
@@ -129,3 +149,5 @@ autoToggle.addEventListener("change", async () => {
 
 fetchLatest();
 setInterval(fetchLatest, 2000);
+
+setInterval(checkConnectionStale, 1000);

@@ -152,7 +152,7 @@ struct AutoPayload {
     enabled: bool,
 }
 
-async fn set_auto_mode(State(state): State<AppState>, Json(body): Json<AutoPayload>) -> StatusCode {
+async fn set_auto(State(state): State<AppState>, Json(body): Json<AutoPayload>) -> StatusCode {
     let mut cmd = state.command.write().await;
     cmd.auto_enabled = body.enabled;
     println!("Set auto_enabled = {}", cmd.auto_enabled);
@@ -177,7 +177,7 @@ async fn main() {
         .route("/api/latest", get(latest))
         .route("/api/water", post(trigger_water))
         .route("/api/command", get(get_command))
-        .route("/api/auto", post(set_auto_mode))
+        .route("/api/auto", post(set_auto))
         .with_state(state);
 
     let addr = "0.0.0.0:3000";
