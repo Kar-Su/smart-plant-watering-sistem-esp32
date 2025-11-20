@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ESP32 Sensor Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="card">
+      <!-- Banner peringatan cahaya -->
+      <div id="light-warning" class="light-warning hidden">
+        ⚠ Cahaya lingkungan kurang. Disarankan menjeda / mematikan mode
+        otomatis penyiraman.
+      </div>
+
+      <div class="header">
+        <h1>ESP32 Sensor Dashboard</h1>
+        <p>Monitoring soil &amp; light, plus kontrol pompa.</p>
+      </div>
+
+      <div class="grid">
+        <div class="metric">
+          <div class="metric-title">Soil Moisture (raw)</div>
+          <div id="soil-value" class="metric-value">-</div>
+          <div class="metric-label">Nilai ADC dari sensor soil.</div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-title">Light (raw)</div>
+          <div id="light-value" class="metric-value">-</div>
+          <div class="metric-label">Nilai sensor cahaya.</div>
+        </div>
+      </div>
+
+      <div class="status">
+        <div class="status-line">
+          <div id="status-dot" class="status-dot wait"></div>
+          <span id="status-text">Menunggu data dari ESP32...</span>
+        </div>
+        <div id="last-update" class="last-update">Last update: -</div>
+      </div>
+
+      <div class="water-indicator">
+        <span id="water-badge" class="badge badge-idle">Pompa OFF</span>
+      </div>
+
+      <!-- Toggle auto mode -->
+      <div class="auto-control">
+        <label class="switch">
+          <input type="checkbox" id="auto-toggle" checked />
+          <span class="slider"></span>
+        </label>
+        <span id="auto-label" class="auto-label">Mode auto: ON</span>
+      </div>
+
+      <div class="water-control">
+        <button id="btn-water" class="btn-water">Siram tanaman sekarang</button>
+        <span id="water-status" class="water-status"></span>
+      </div>
+    </div>
+
+    <script src="/scripts.js"></script>
+  </body>
+</html>
