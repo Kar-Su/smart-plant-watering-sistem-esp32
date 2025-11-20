@@ -6,20 +6,25 @@ let autoPending = false;
 
 let lastSeenMs = null;
 
-function setDisconnectedUI() {
+function setDisconnectedUI(ageMs) {
   const statusText = document.getElementById("status-text");
   const statusDot = document.getElementById("status-dot");
   const waterBadge = document.getElementById("water-badge");
 
-  statusText.textContent = "ESP32 disconnected";
+  const ageMin = Math.floor(ageMs / 60_000);
+  const ageSec = Math.floor((ageMs % 60000) / 1000);
+
+  statusText.innerHTML =
+    "ESP32 disconnected<br>" + `last seen ${ageMin}m ${ageSec}s`;
   statusDot.className = "status-dot err";
+
   waterBadge.textContent = "Pompa: unknown";
   waterBadge.className = "badge badge-idle";
 
   document.getElementById("btn-water").disabled = true;
 }
 
-function setConnectedUIEnableButtons() {
+function setConnectedUI() {
   document.getElementById("btn-water").disabled = false;
 }
 
@@ -28,7 +33,7 @@ function checkConnectionStale() {
 
   const age = Date.now() - lastSeenMs;
   if (age > DISCONNECT_TIMEOUT_MS) {
-    setDisconnectedUI();
+    setDisconnectedUI(age);
   }
 }
 
@@ -61,46 +66,59 @@ async function fetchLatest() {
       return;
     }
 
-    const updated = new Date(data.updated_at);
-    lastSeenMs = updated.getTime();
-
-    if (Date.now() - lastSeenMs > DISCONNECT_TIMEOUT_MS) {
-      setDisconnectedUI();
-      return;
-    } else {
-      setConnectedUIEnableButtons();
-    }
-
     soilEl.textContent = data.soil;
     lightEl.textContent = data.light;
 
-    if (data.light < LIGHT_THRESHOLD) warningBar.classList.remove("hidden");
-    else warningBar.classList.add("hidden");
-
-    if (data.is_watering === true) {
-      statusText.textContent = "ESP32 sedang menyiram";
-      statusDot.className = "status-dot ok";
-      waterBadge.textContent = "Pompa ON";
-      waterBadge.className = "badge badge-watering";
+    if (data.light < LIGHT_THRESHOLD) {
+      warningBar.classList.remove("hidden");
     } else {
-      statusText.textContent = "ESP32 sedang monitoring";
-      statusDot.className = "status-dot ok";
-      waterBadge.textContent = "Pompa OFF";
-      waterBadge.className = "badge badge-idle";
+      warningBar.classList.add("hidden");
     }
 
     if (typeof data.auto_enabled === "boolean") {
       if (!autoPending) {
         autoEnabled = data.auto_enabled;
-      } else if (data.auto_enabled === autoEnabled) {
-        autoPending = false;
+      } else {
+        if (data.auto_enabled === autoEnabled) {
+          autoPending = false;
+        }
       }
     }
 
     autoToggle.checked = autoEnabled;
     autoLabel.textContent = autoEnabled ? "Mode auto: ON" : "Mode auto: OFF";
 
-    lastUpdate.textContent = "Last update: " + updated.toLocaleTimeString();
+    const updated = new Date(data.updated_at);
+    const ts = updated.getTime();
+
+    if (!Number.isNaN(ts)) {
+      lastSeenMs = ts;
+    }
+
+    lastUpdate.textContent = Number.isNaN(ts)
+      ? "Last update: " + String(data.updated_at)
+      : "Last update: " + updated.toLocaleTimeString();
+
+    if (lastSeenMs !== null) {
+      const age = Date.now() - lastSeenMs;
+      if (age > DISCONNECT_TIMEOUT_MS) {
+        setDisconnectedUI(age);
+        return;
+      }
+    }
+
+    setConnectedUI();
+    statusDot.className = "status-dot ok";
+
+    if (data.is_watering === true) {
+      statusText.textContent = "ESP32 sedang menyiram";
+      waterBadge.textContent = "Pompa ON";
+      waterBadge.className = "badge badge-watering";
+    } else {
+      statusText.textContent = "ESP32 sedang monitoring";
+      waterBadge.textContent = "Pompa OFF";
+      waterBadge.className = "badge badge-idle";
+    }
   } catch (err) {
     console.error("fetchLatest error:", err);
   }
@@ -114,12 +132,16 @@ const autoLabel = document.getElementById("auto-label");
 btnWater.addEventListener("click", async () => {
   btnWater.disabled = true;
   waterStatus.textContent = "Mengirim perintah siram...";
+  a;
+
   try {
     const res = await fetch("/api/water", { method: "POST" });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    waterStatus.textContent = "Perintah siram dikirim.";
+
+    waterStatus.textContent = "Perintah siram dikirim ke ESP32";
   } catch (err) {
-    waterStatus.textContent = "Gagal mengirim perintah.";
+    console.error(err);
+    waterStatus.textContent = "Gagal mengirim perintah";
   } finally {
     setTimeout(() => {
       btnWater.disabled = false;
@@ -131,6 +153,7 @@ btnWater.addEventListener("click", async () => {
 autoToggle.addEventListener("change", async () => {
   autoEnabled = autoToggle.checked;
   autoPending = true;
+
   autoLabel.textContent = autoEnabled ? "Mode auto: ON" : "Mode auto: OFF";
 
   try {
@@ -140,6 +163,8 @@ autoToggle.addEventListener("change", async () => {
       body: JSON.stringify({ enabled: autoEnabled }),
     });
   } catch (err) {
+    console.error("Gagal kirim auto mode:", err);
+
     autoPending = false;
     autoEnabled = !autoEnabled;
     autoToggle.checked = autoEnabled;
@@ -149,5 +174,4 @@ autoToggle.addEventListener("change", async () => {
 
 fetchLatest();
 setInterval(fetchLatest, 2000);
-
 setInterval(checkConnectionStale, 1000);
