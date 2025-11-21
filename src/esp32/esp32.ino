@@ -1,11 +1,15 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <BH1750.h>
 #include "config.hpp"
 
 #define ENABLE_SOIL
 #define ENABLE_PUMP
 #define ENABLE_LIGHT
+
+BH1750 lightSensor;
 
 const char* SSID = _SSID;
 const char* PASSWORD = _PASSWORD;
@@ -128,6 +132,8 @@ void setup() {
     digitalWrite(_RELAY_PIN, HIGH);
   #endif
   #ifdef ENABLE_LIGHT
+    Wire.begin(_SDA_PIN,_SCL_PIN);
+    lightSensor.begin();
   #endif
   
   setupAccessPoint();
@@ -144,7 +150,7 @@ void loop() {
   
 
   #ifdef ENABLE_LIGHT
-    int32_t light  = 0;
+    int32_t light  = lightSensor.readLightLevel();
   #else
     int32_t light = random(1490, 1510);
   #endif
