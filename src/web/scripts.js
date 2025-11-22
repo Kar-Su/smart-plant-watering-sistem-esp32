@@ -132,8 +132,6 @@ const autoLabel = document.getElementById("auto-label");
 btnWater.addEventListener("click", async () => {
   btnWater.disabled = true;
   waterStatus.textContent = "Mengirim perintah siram...";
-  a;
-
   try {
     const res = await fetch("/api/water", { method: "POST" });
     if (!res.ok) throw new Error("HTTP " + res.status);
